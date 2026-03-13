@@ -68,10 +68,12 @@ auth.post("/login", async (c) => {
     );
 
     // Set cookie HTTP-only
+    // SameSite=None requis en production (cross-origin pages.dev → workers.dev)
+    const isProduction = c.env.NODE_ENV === "production";
     setCookie(c, "auth_session", sessionToken, {
       httpOnly: true,
-      secure: c.env.NODE_ENV === "production",
-      sameSite: "Lax",
+      secure: isProduction,
+      sameSite: isProduction ? "None" : "Lax",
       maxAge: 7 * 24 * 60 * 60, // 7 jours
       path: "/",
     });
