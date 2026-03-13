@@ -20,6 +20,7 @@ app.use(
       // Autoriser les domaines Filtreplante
       if (
         origin.endsWith(".filtreplante.com") ||
+        origin.endsWith(".pages.dev") ||
         origin.includes("localhost") ||
         origin.includes("127.0.0.1")
       ) {
