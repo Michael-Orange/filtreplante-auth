@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { createDb } from "../lib/db";
+import { getDb } from "../lib/db";
 import { users } from "../schema";
 import type { Env } from "../types/env";
 
@@ -13,7 +13,7 @@ const usersRoute = new Hono<{ Bindings: Env }>();
  */
 usersRoute.get("/", async (c) => {
   try {
-    const db = createDb(c.env.DATABASE_URL);
+    const db = getDb(c.env.DATABASE_URL);
 
     const activeUsers = await db
       .select({

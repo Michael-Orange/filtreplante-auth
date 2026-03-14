@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { createDb } from "../lib/db";
+import { getDb } from "../lib/db";
 import { encryptPassword, decryptPassword } from "../lib/crypto";
 import { users } from "../schema";
 import { requireAuth } from "../middleware/auth";
@@ -24,7 +24,7 @@ adminRoute.use("/*", requireAuth, requireAdmin);
  */
 adminRoute.get("/users", async (c) => {
   try {
-    const db = createDb(c.env.DATABASE_URL);
+    const db = getDb(c.env.DATABASE_URL);
 
     const allUsers = await db.select().from(users).orderBy(users.nom);
 
@@ -47,7 +47,7 @@ adminRoute.post("/users", async (c) => {
     const body = await c.req.json();
     const validated = CreateUserSchema.parse(body);
 
-    const db = createDb(c.env.DATABASE_URL);
+    const db = getDb(c.env.DATABASE_URL);
     const currentUser = c.get("user");
 
     // Vérifier si le username existe déjà
@@ -109,7 +109,7 @@ adminRoute.patch("/users/:id", async (c) => {
     const body = await c.req.json();
     const validated = UpdateUserSchema.parse(body);
 
-    const db = createDb(c.env.DATABASE_URL);
+    const db = getDb(c.env.DATABASE_URL);
     const currentUser = c.get("user");
 
     // Protection : admin ne peut pas se modifier lui-même de manière dangereuse
@@ -163,7 +163,7 @@ adminRoute.delete("/users/:id", async (c) => {
       return c.json({ error: "Vous ne pouvez pas supprimer votre propre compte" }, 400);
     }
 
-    const db = createDb(c.env.DATABASE_URL);
+    const db = getDb(c.env.DATABASE_URL);
 
     // Vérifier que l'utilisateur existe
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
@@ -189,7 +189,7 @@ adminRoute.delete("/users/:id", async (c) => {
 adminRoute.get("/users/:id/password", async (c) => {
   try {
     const userId = parseInt(c.req.param("id"));
-    const db = createDb(c.env.DATABASE_URL);
+    const db = getDb(c.env.DATABASE_URL);
 
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
@@ -217,7 +217,7 @@ adminRoute.post("/users/:id/password", async (c) => {
     const body = await c.req.json();
     const validated = ChangePasswordSchema.parse(body);
 
-    const db = createDb(c.env.DATABASE_URL);
+    const db = getDb(c.env.DATABASE_URL);
 
     // Vérifier que l'utilisateur existe
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
