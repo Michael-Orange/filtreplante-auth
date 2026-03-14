@@ -5,10 +5,11 @@ export const DEFAULT_APPS: AppInfo[] = [
   {
     id: "stock",
     name: "Gestion Stock",
-    url: "https://stock.filtreplante.com",
+    url: "https://filtreplante-stock-web.pages.dev",
     icon: "📦",
     description: "Gestion des stocks et inventaire",
     requiresPermission: "peut_acces_stock",
+    ssoCallbackUrl: "https://filtreplante-stock.michael-orange09.workers.dev/sso/login",
   },
   {
     id: "prix",
@@ -27,9 +28,17 @@ export const DEFAULT_APPS: AppInfo[] = [
     directLink: true,
   },
   {
+    id: "factures-admin",
+    name: "Factures Admin",
+    url: "https://filtreplante-facture.pages.dev/admin",
+    icon: "🧾",
+    description: "Administration des factures",
+    ssoCallbackUrl: "https://filtreplante-facture.michael-orange09.workers.dev/api/sso/login",
+  },
+  {
     id: "maintenance",
     name: "Maintenance",
-    url: "https://maintenance.filtreplante.com",
+    url: "https://filtreplante-maintenance-web.pages.dev",
     icon: "🔧",
     description: "Suivi des interventions terrain",
     directLink: true,
@@ -38,10 +47,11 @@ export const DEFAULT_APPS: AppInfo[] = [
   {
     id: "maintenance-admin",
     name: "Maintenance Admin",
-    url: "https://maintenance.filtreplante.com/admin",
+    url: "https://filtreplante-maintenance-web.pages.dev/admin",
     icon: "⚙️",
     description: "Gestion des interventions de maintenance",
     requiresPermission: "peut_admin_maintenance",
+    ssoCallbackUrl: "https://filtreplante-maintenance.michael-orange09.workers.dev/api/sso/login",
   },
   {
     id: "construction",
