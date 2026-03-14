@@ -56,10 +56,11 @@ export const DEFAULT_APPS: AppInfo[] = [
   {
     id: "construction",
     name: "Calculateur Construction",
-    url: "https://calculateur.filtreplante.com",
+    url: "https://filtreplante-calculateur-web.pages.dev",
     icon: "🏗️",
     description: "Outil de calcul de matériaux pour projets de construction",
     requiresPermission: "peut_acces_construction",
+    ssoCallbackUrl: "https://filtreplante-calculateur.michael-orange09.workers.dev/sso/login",
   },
   {
     id: "shelly",
