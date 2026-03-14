@@ -56,9 +56,13 @@ ssoRoute.get("/generate", requireAuth, async (c) => {
     c.env.JWT_SECRET
   );
 
+  const callbackBase = targetApp.ssoCallbackUrl || `${targetApp.url}/sso/login`;
+  const redirectUrl = `${callbackBase}?token=${ssoToken}`;
+
   return c.json({
     token: ssoToken,
-    redirectUrl: `${targetApp.url}/sso/login`,
+    redirectUrl,
+    success: true,
   });
 });
 
