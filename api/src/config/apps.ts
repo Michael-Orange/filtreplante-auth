@@ -14,10 +14,11 @@ export const DEFAULT_APPS: AppInfo[] = [
   {
     id: "prix",
     name: "Prix Référentiel",
-    url: "https://prix.filtreplante.com",
+    url: "https://filtreplante-prix-web.pages.dev",
     icon: "💰",
     description: "Référentiel des prix produits",
     requiresPermission: "peut_acces_prix",
+    authV2: true,
   },
   {
     id: "factures",
@@ -60,7 +61,7 @@ export const DEFAULT_APPS: AppInfo[] = [
     icon: "🏗️",
     description: "Outil de calcul de matériaux pour projets de construction",
     requiresPermission: "peut_acces_construction",
-    ssoCallbackUrl: "https://filtreplante-calculateur.michael-orange09.workers.dev/sso/login",
+    authV2: true,
   },
   {
     id: "shelly",
