@@ -54,6 +54,7 @@ export interface AppInfo {
   url: string;
   directLink?: boolean;
   requiresPermission?: string;
+  authV2?: boolean;
 }
 
 export interface PublicUser {

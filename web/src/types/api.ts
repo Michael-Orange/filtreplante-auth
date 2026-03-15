@@ -3,6 +3,7 @@ import { JwtUser, DbUser, PublicUser, AppInfo } from './user';
 export interface LoginResponse {
   success: boolean;
   user?: JwtUser;
+  token?: string;
   message?: string;
 }
 

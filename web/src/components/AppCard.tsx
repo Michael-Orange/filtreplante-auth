@@ -2,6 +2,8 @@ import { useState } from 'react';
 import type { AppInfo } from '../types/user';
 import { api } from '../lib/api';
 
+const TOKEN_KEY = 'auth_session_token';
+
 interface AppCardProps {
   app: AppInfo;
 }
@@ -17,6 +19,17 @@ export function AppCard({ app }: AppCardProps) {
       return;
     }
 
+    // Auth v2 : rediriger directement vers l'app avec le token de session
+    if (app.authV2) {
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (token) {
+        const separator = app.url.includes('?') ? '&' : '?';
+        window.location.href = `${app.url}${separator}token=${token}`;
+      }
+      return;
+    }
+
+    // Legacy SSO pour les apps Replit
     try {
       setIsLoading(true);
       const response = await api.generateSSO(app.id);

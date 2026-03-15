@@ -10,4 +10,6 @@ export interface AppInfo {
   requiresPermission?: string;
   specialUsers?: string[];
   ssoCallbackUrl?: string;
+  /** Auth v2 : l'app utilise @filtreplante/auth avec Bearer token (pas de SSO callback) */
+  authV2?: boolean;
 }

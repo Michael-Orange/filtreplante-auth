@@ -51,7 +51,7 @@ export const DEFAULT_APPS: AppInfo[] = [
     icon: "⚙️",
     description: "Gestion des interventions de maintenance",
     requiresPermission: "peut_admin_maintenance",
-    ssoCallbackUrl: "https://filtreplante-maintenance.michael-orange09.workers.dev/api/sso/login",
+    authV2: true,
   },
   {
     id: "construction",
