@@ -29,6 +29,7 @@ app.use(
       return "https://filtreplante.com";
     },
     credentials: true,
+    allowHeaders: ["Content-Type", "Authorization"],
   })
 );
 

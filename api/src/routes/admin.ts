@@ -15,22 +15,16 @@ type Variables = {
 
 const adminRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-// Appliquer les middlewares auth + admin à toutes les routes
 adminRoute.use("/*", requireAuth, requireAdmin);
 
 /**
  * GET /api/admin/users
- * Liste tous les utilisateurs (avec permissions)
  */
 adminRoute.get("/users", async (c) => {
   try {
     const db = getDb(c.env.DATABASE_URL);
-
     const allUsers = await db.select().from(users).orderBy(users.nom);
-
-    // Retirer password_encrypted de la réponse
-    const sanitized = allUsers.map(({ password_encrypted, ...rest }) => rest);
-
+    const sanitized = allUsers.map(({ password_encrypted, password_encoded, ...rest }) => rest);
     return c.json(sanitized);
   } catch (error) {
     console.error("Error fetching all users:", error);
@@ -40,7 +34,7 @@ adminRoute.get("/users", async (c) => {
 
 /**
  * POST /api/admin/users
- * Créer un nouvel utilisateur
+ * Dual-write : écrit dans password_encoded (Base64) ET password_encrypted (CryptoJS)
  */
 adminRoute.post("/users", async (c) => {
   try {
@@ -50,7 +44,6 @@ adminRoute.post("/users", async (c) => {
     const db = getDb(c.env.DATABASE_URL);
     const currentUser = c.get("user");
 
-    // Vérifier si le username existe déjà
     const [existing] = await db
       .select()
       .from(users)
@@ -61,10 +54,10 @@ adminRoute.post("/users", async (c) => {
       return c.json({ error: "Ce username existe déjà" }, 409);
     }
 
-    // Chiffrer le mot de passe
+    // Dual-write : Base64 + CryptoJS AES
+    const encoded = btoa(validated.password);
     const encrypted = encryptPassword(validated.password, c.env.CRYPTO_SECRET);
 
-    // Créer l'utilisateur
     const [newUser] = await db
       .insert(users)
       .values({
@@ -72,6 +65,7 @@ adminRoute.post("/users", async (c) => {
         nom: validated.nom,
         email: validated.email || null,
         password_encrypted: encrypted,
+        password_encoded: encoded,
         role: validated.role,
         actif: validated.actif,
         peut_acces_stock: validated.peut_acces_stock,
@@ -83,12 +77,12 @@ adminRoute.post("/users", async (c) => {
       })
       .returning();
 
-    const { password_encrypted, ...sanitized } = newUser;
+    const { password_encrypted, password_encoded, ...sanitized } = newUser;
 
     return c.json({
       success: true,
       user: sanitized,
-      password: validated.password, // Retourner le password en clair pour l'admin
+      password: validated.password,
     });
   } catch (error: any) {
     console.error("Error creating user:", error);
@@ -101,7 +95,6 @@ adminRoute.post("/users", async (c) => {
 
 /**
  * PATCH /api/admin/users/:id
- * Modifier un utilisateur
  */
 adminRoute.patch("/users/:id", async (c) => {
   try {
@@ -112,7 +105,6 @@ adminRoute.patch("/users/:id", async (c) => {
     const db = getDb(c.env.DATABASE_URL);
     const currentUser = c.get("user");
 
-    // Protection : admin ne peut pas se modifier lui-même de manière dangereuse
     if (currentUser.id === userId) {
       if (validated.role && validated.role !== "admin") {
         return c.json({ error: "Vous ne pouvez pas vous retirer le rôle admin" }, 400);
@@ -122,7 +114,6 @@ adminRoute.patch("/users/:id", async (c) => {
       }
     }
 
-    // Mettre à jour l'utilisateur
     const [updated] = await db
       .update(users)
       .set({
@@ -137,7 +128,7 @@ adminRoute.patch("/users/:id", async (c) => {
       return c.json({ error: "Utilisateur non trouvé" }, 404);
     }
 
-    const { password_encrypted, ...sanitized } = updated;
+    const { password_encrypted, password_encoded, ...sanitized } = updated;
 
     return c.json({ success: true, user: sanitized });
   } catch (error: any) {
@@ -151,30 +142,24 @@ adminRoute.patch("/users/:id", async (c) => {
 
 /**
  * DELETE /api/admin/users/:id
- * Supprimer un utilisateur
  */
 adminRoute.delete("/users/:id", async (c) => {
   try {
     const userId = parseInt(c.req.param("id"));
     const currentUser = c.get("user");
 
-    // Protection : admin ne peut pas se supprimer lui-même
     if (currentUser.id === userId) {
       return c.json({ error: "Vous ne pouvez pas supprimer votre propre compte" }, 400);
     }
 
     const db = getDb(c.env.DATABASE_URL);
-
-    // Vérifier que l'utilisateur existe
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
     if (!user) {
       return c.json({ error: "Utilisateur non trouvé" }, 404);
     }
 
-    // Supprimer l'utilisateur
     await db.delete(users).where(eq(users.id, userId));
-
     return c.json({ success: true });
   } catch (error) {
     console.error("Error deleting user:", error);
@@ -184,7 +169,7 @@ adminRoute.delete("/users/:id", async (c) => {
 
 /**
  * GET /api/admin/users/:id/password
- * Récupérer le mot de passe déchiffré d'un utilisateur
+ * Lire le mot de passe — priorité Base64, fallback CryptoJS
  */
 adminRoute.get("/users/:id/password", async (c) => {
   try {
@@ -197,10 +182,14 @@ adminRoute.get("/users/:id/password", async (c) => {
       return c.json({ error: "Utilisateur non trouvé" }, 404);
     }
 
-    // Déchiffrer le mot de passe
-    const decrypted = decryptPassword(user.password_encrypted, c.env.CRYPTO_SECRET);
+    let password: string;
+    if (user.password_encoded) {
+      password = atob(user.password_encoded);
+    } else {
+      password = decryptPassword(user.password_encrypted, c.env.CRYPTO_SECRET);
+    }
 
-    return c.json({ password: decrypted });
+    return c.json({ password });
   } catch (error) {
     console.error("Error decrypting password:", error);
     return c.json({ error: "Erreur serveur" }, 500);
@@ -209,7 +198,7 @@ adminRoute.get("/users/:id/password", async (c) => {
 
 /**
  * POST /api/admin/users/:id/password
- * Changer le mot de passe d'un utilisateur
+ * Dual-write : écrit dans les DEUX colonnes
  */
 adminRoute.post("/users/:id/password", async (c) => {
   try {
@@ -219,20 +208,22 @@ adminRoute.post("/users/:id/password", async (c) => {
 
     const db = getDb(c.env.DATABASE_URL);
 
-    // Vérifier que l'utilisateur existe
     const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
     if (!user) {
       return c.json({ error: "Utilisateur non trouvé" }, 404);
     }
 
-    // Chiffrer le nouveau mot de passe
+    const encoded = btoa(validated.password);
     const encrypted = encryptPassword(validated.password, c.env.CRYPTO_SECRET);
 
-    // Mettre à jour
     await db
       .update(users)
-      .set({ password_encrypted: encrypted, updated_at: new Date() })
+      .set({
+        password_encrypted: encrypted,
+        password_encoded: encoded,
+        updated_at: new Date(),
+      })
       .where(eq(users.id, userId));
 
     return c.json({ success: true });

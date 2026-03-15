@@ -9,11 +9,18 @@ type Variables = {
 
 /**
  * Middleware d'authentification
- * Vérifie le cookie auth_session et injecte l'utilisateur dans le contexte
+ * Vérifie le cookie auth_session OU le header Authorization: Bearer
+ * (fallback nécessaire car les cookies cross-site sont bloqués par les navigateurs modernes)
  */
 export async function requireAuth(c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) {
-  const token = getCookie(c, "auth_session");
-  
+  let token = getCookie(c, "auth_session");
+  if (!token) {
+    const authHeader = c.req.header("Authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      token = authHeader.slice(7);
+    }
+  }
+
   if (!token) {
     return c.json({ error: "Non authentifié" }, 401);
   }

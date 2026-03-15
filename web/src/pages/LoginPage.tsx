@@ -39,12 +39,19 @@ export function LoginPage() {
       const response = await api.login(selectedUsername, password);
       
       if (response.success && response.user) {
-        // Check for redirect parameter
         const urlParams = new URLSearchParams(window.location.search);
+
+        // Auth v2 : returnTo → redirect direct avec ?token=jwt (pas de SSO)
+        const returnTo = urlParams.get('returnTo');
+        if (returnTo && response.token) {
+          const separator = returnTo.includes('?') ? '&' : '?';
+          window.location.href = `${returnTo}${separator}token=${response.token}`;
+          return;
+        }
+
+        // Legacy : redirect via SSO (apps Replit)
         const redirectApp = urlParams.get('redirect');
-        
         if (redirectApp) {
-          // Generate SSO token and redirect to app
           try {
             const ssoResponse = await api.generateSSO(redirectApp);
             if (ssoResponse.success && ssoResponse.redirectUrl) {
@@ -55,7 +62,7 @@ export function LoginPage() {
             console.error('SSO generation failed:', ssoError);
           }
         }
-        
+
         // Default redirect to apps page
         setLocation('/apps');
       } else {

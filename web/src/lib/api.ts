@@ -10,6 +10,24 @@ import type {
 } from '../types/api';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
+const TOKEN_KEY = 'auth_session_token';
+
+function getStoredToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+function storeToken(token: string) {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearStoredToken() {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getStoredToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export const api = {
   // Auth
@@ -20,42 +38,51 @@ export const api = {
       credentials: 'include',
       body: JSON.stringify({ username, password })
     });
-    return response.json();
+    const data = await response.json();
+    if (data.success && data.token) {
+      storeToken(data.token);
+    }
+    return data;
   },
 
   logout: async (): Promise<void> => {
+    clearStoredToken();
     await fetch(`${API_URL}/api/auth/logout`, {
       method: 'POST',
-      credentials: 'include'
+      credentials: 'include',
+      headers: authHeaders(),
     });
   },
 
   me: async (): Promise<MeResponse | null> => {
     const response = await fetch(`${API_URL}/api/auth/me`, {
-      credentials: 'include'
+      credentials: 'include',
+      headers: authHeaders(),
     });
     if (!response.ok) return null;
-    return response.json(); // backend retourne l'user directement
+    return response.json();
   },
 
   // Users publics (dropdown login)
   getPublicUsers: async (): Promise<PublicUsersResponse> => {
     const response = await fetch(`${API_URL}/api/auth/users`);
-    return response.json(); // backend retourne un tableau directement
+    return response.json();
   },
 
   // Apps
   getApps: async (): Promise<AppsResponse> => {
     const response = await fetch(`${API_URL}/api/apps`, {
-      credentials: 'include'
+      credentials: 'include',
+      headers: authHeaders(),
     });
-    return response.json(); // backend retourne un tableau directement
+    return response.json();
   },
 
   // SSO
   generateSSO: async (app: string): Promise<SSOResponse> => {
     const response = await fetch(`${API_URL}/api/sso/generate?app=${app}`, {
-      credentials: 'include'
+      credentials: 'include',
+      headers: authHeaders(),
     });
     return response.json();
   },
@@ -63,9 +90,10 @@ export const api = {
   // Admin
   getAllUsers: async (): Promise<UsersResponse> => {
     const response = await fetch(`${API_URL}/api/admin/users`, {
-      credentials: 'include'
+      credentials: 'include',
+      headers: authHeaders(),
     });
-    return response.json(); // backend retourne un tableau directement
+    return response.json();
   },
 
   createUser: async (data: {
@@ -82,7 +110,6 @@ export const api = {
       shelly: boolean;
     };
   }): Promise<UserResponse> => {
-    // Mapper les champs frontend → backend
     const body = {
       username: data.username,
       nom: data.name,
@@ -98,7 +125,7 @@ export const api = {
     };
     const response = await fetch(`${API_URL}/api/admin/users`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       credentials: 'include',
       body: JSON.stringify(body)
     });
@@ -118,7 +145,6 @@ export const api = {
       shelly?: boolean;
     };
   }): Promise<UserResponse> => {
-    // Mapper les champs frontend → backend
     const body: Record<string, unknown> = {};
     if (data.name !== undefined) body.nom = data.name;
     if (data.email !== undefined) body.email = data.email;
@@ -133,7 +159,7 @@ export const api = {
     }
     const response = await fetch(`${API_URL}/api/admin/users/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       credentials: 'include',
       body: JSON.stringify(body)
     });
@@ -143,14 +169,16 @@ export const api = {
   deleteUser: async (id: number): Promise<UserResponse> => {
     const response = await fetch(`${API_URL}/api/admin/users/${id}`, {
       method: 'DELETE',
-      credentials: 'include'
+      credentials: 'include',
+      headers: authHeaders(),
     });
     return response.json();
   },
 
   getPassword: async (id: number): Promise<PasswordResponse> => {
     const response = await fetch(`${API_URL}/api/admin/users/${id}/password`, {
-      credentials: 'include'
+      credentials: 'include',
+      headers: authHeaders(),
     });
     return response.json();
   },
@@ -158,7 +186,7 @@ export const api = {
   changePassword: async (id: number, password: string): Promise<UserResponse> => {
     const response = await fetch(`${API_URL}/api/admin/users/${id}/password`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       credentials: 'include',
       body: JSON.stringify({ password })
     });

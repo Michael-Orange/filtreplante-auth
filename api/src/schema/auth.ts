@@ -10,6 +10,7 @@ export const users = referentiel.table("users", {
   nom: text("nom").notNull(),
   email: text("email"),
   password_encrypted: text("password_encrypted").notNull(),
+  password_encoded: text("password_encoded"), // Base64 — nouvelles apps CF Workers
   role: text("role").notNull().default("user"),
   actif: boolean("actif").notNull().default(true),
   

@@ -9,4 +9,5 @@ export interface AppInfo {
   publicAccess?: boolean;
   requiresPermission?: string;
   specialUsers?: string[];
+  ssoCallbackUrl?: string;
 }
