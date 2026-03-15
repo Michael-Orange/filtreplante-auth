@@ -9,7 +9,7 @@ export const DEFAULT_APPS: AppInfo[] = [
     icon: "📦",
     description: "Gestion des stocks et inventaire",
     requiresPermission: "peut_acces_stock",
-    ssoCallbackUrl: "https://filtreplante-stock.michael-orange09.workers.dev/sso/login",
+    authV2: true,
   },
   {
     id: "prix",
