@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
+import { neon } from "@neondatabase/serverless";
 import { getDb } from "../lib/db";
-import { encryptPassword, decryptPassword } from "../lib/crypto";
+import { encryptPassword } from "../lib/crypto";
 import { users } from "../schema";
 import { requireAuth } from "../middleware/auth";
 import { requireAdmin } from "../middleware/admin";
@@ -17,15 +18,53 @@ const adminRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 adminRoute.use("/*", requireAuth, requireAdmin);
 
+// Colonnes safe pour Drizzle (exclut password_encrypted qui casse le JSON parsing Neon)
+const safeColumns = {
+  id: users.id,
+  username: users.username,
+  nom: users.nom,
+  email: users.email,
+  password_encoded: users.password_encoded,
+  role: users.role,
+  actif: users.actif,
+  peut_acces_stock: users.peut_acces_stock,
+  peut_acces_prix: users.peut_acces_prix,
+  peut_admin_maintenance: users.peut_admin_maintenance,
+  peut_acces_construction: users.peut_acces_construction,
+  peut_acces_shelly: users.peut_acces_shelly,
+  date_creation: users.date_creation,
+  derniere_connexion: users.derniere_connexion,
+  created_by: users.created_by,
+  updated_at: users.updated_at,
+} as const;
+
+// Colonnes publiques (sans passwords)
+const publicColumns = {
+  id: users.id,
+  username: users.username,
+  nom: users.nom,
+  email: users.email,
+  role: users.role,
+  actif: users.actif,
+  peut_acces_stock: users.peut_acces_stock,
+  peut_acces_prix: users.peut_acces_prix,
+  peut_admin_maintenance: users.peut_admin_maintenance,
+  peut_acces_construction: users.peut_acces_construction,
+  peut_acces_shelly: users.peut_acces_shelly,
+  date_creation: users.date_creation,
+  derniere_connexion: users.derniere_connexion,
+  created_by: users.created_by,
+  updated_at: users.updated_at,
+} as const;
+
 /**
  * GET /api/admin/users
  */
 adminRoute.get("/users", async (c) => {
   try {
     const db = getDb(c.env.DATABASE_URL);
-    const allUsers = await db.select().from(users).orderBy(users.nom);
-    const sanitized = allUsers.map(({ password_encrypted, password_encoded, ...rest }) => rest);
-    return c.json(sanitized);
+    const allUsers = await db.select(publicColumns).from(users).orderBy(users.nom);
+    return c.json(allUsers);
   } catch (error) {
     console.error("Error fetching all users:", error);
     return c.json({ error: "Erreur serveur" }, 500);
@@ -45,7 +84,7 @@ adminRoute.post("/users", async (c) => {
     const currentUser = c.get("user");
 
     const [existing] = await db
-      .select()
+      .select({ id: users.id })
       .from(users)
       .where(eq(users.username, validated.username.toLowerCase().trim()))
       .limit(1);
@@ -58,7 +97,8 @@ adminRoute.post("/users", async (c) => {
     const encoded = btoa(validated.password);
     const encrypted = encryptPassword(validated.password, c.env.CRYPTO_SECRET);
 
-    const [newUser] = await db
+    // INSERT puis re-select les colonnes safe (évite .returning() qui inclut password_encrypted)
+    await db
       .insert(users)
       .values({
         username: validated.username.toLowerCase().trim(),
@@ -74,14 +114,17 @@ adminRoute.post("/users", async (c) => {
         peut_acces_construction: validated.peut_acces_construction,
         peut_acces_shelly: validated.peut_acces_shelly,
         created_by: currentUser.username,
-      })
-      .returning();
+      });
 
-    const { password_encrypted, password_encoded, ...sanitized } = newUser;
+    const [newUser] = await db
+      .select(publicColumns)
+      .from(users)
+      .where(eq(users.username, validated.username.toLowerCase().trim()))
+      .limit(1);
 
     return c.json({
       success: true,
-      user: sanitized,
+      user: newUser,
       password: validated.password,
     });
   } catch (error: any) {
@@ -114,23 +157,27 @@ adminRoute.patch("/users/:id", async (c) => {
       }
     }
 
-    const [updated] = await db
+    // UPDATE puis re-select (évite .returning() qui inclut password_encrypted)
+    await db
       .update(users)
       .set({
         ...validated,
         email: validated.email || null,
         updated_at: new Date(),
       })
+      .where(eq(users.id, userId));
+
+    const [updated] = await db
+      .select(publicColumns)
+      .from(users)
       .where(eq(users.id, userId))
-      .returning();
+      .limit(1);
 
     if (!updated) {
       return c.json({ error: "Utilisateur non trouvé" }, 404);
     }
 
-    const { password_encrypted, password_encoded, ...sanitized } = updated;
-
-    return c.json({ success: true, user: sanitized });
+    return c.json({ success: true, user: updated });
   } catch (error: any) {
     console.error("Error updating user:", error);
     if (error.name === "ZodError") {
@@ -153,7 +200,11 @@ adminRoute.delete("/users/:id", async (c) => {
     }
 
     const db = getDb(c.env.DATABASE_URL);
-    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    const [user] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
 
     if (!user) {
       return c.json({ error: "Utilisateur non trouvé" }, 404);
@@ -169,27 +220,39 @@ adminRoute.delete("/users/:id", async (c) => {
 
 /**
  * GET /api/admin/users/:id/password
- * Lire le mot de passe — priorité Base64, fallback CryptoJS
+ * Lire le mot de passe — priorité Base64, fallback CryptoJS via raw SQL
  */
 adminRoute.get("/users/:id/password", async (c) => {
   try {
     const userId = parseInt(c.req.param("id"));
     const db = getDb(c.env.DATABASE_URL);
 
-    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    // D'abord essayer Base64 via Drizzle (safe)
+    const [user] = await db
+      .select({ id: users.id, password_encoded: users.password_encoded })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
 
     if (!user) {
       return c.json({ error: "Utilisateur non trouvé" }, 404);
     }
 
-    let password: string;
     if (user.password_encoded) {
-      password = atob(user.password_encoded);
-    } else {
-      password = decryptPassword(user.password_encrypted, c.env.CRYPTO_SECRET);
+      return c.json({ password: atob(user.password_encoded) });
     }
 
-    return c.json({ password });
+    // Fallback CryptoJS via raw SQL (évite Drizzle qui crashe sur password_encrypted)
+    const sql = neon(c.env.DATABASE_URL);
+    const rows = await sql`
+      SELECT password_encrypted FROM referentiel.users WHERE id = ${userId} LIMIT 1
+    `;
+    if (rows[0]?.password_encrypted) {
+      const { decryptPassword } = await import("../lib/crypto");
+      return c.json({ password: decryptPassword(rows[0].password_encrypted, c.env.CRYPTO_SECRET) });
+    }
+
+    return c.json({ error: "Mot de passe non trouvé" }, 404);
   } catch (error) {
     console.error("Error decrypting password:", error);
     return c.json({ error: "Erreur serveur" }, 500);
@@ -208,7 +271,12 @@ adminRoute.post("/users/:id/password", async (c) => {
 
     const db = getDb(c.env.DATABASE_URL);
 
-    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    // Vérifier existence sans charger password_encrypted
+    const [user] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
 
     if (!user) {
       return c.json({ error: "Utilisateur non trouvé" }, 404);
